@@ -1,0 +1,32 @@
+services:
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    
+    healthcheck: 
+      test: ["CMD", "rabbitmq-diagnostics", "ping"] 
+      interval: 10s 
+      timeout: 5s 
+      retries: 5
+
+  statusserver:
+    expose: 
+      - "8080"
+    build: .
+    environment:
+      SPRING_RABBITMQ_HOST: rabbitmq
+    depends_on: 
+      rabbitmq: 
+        condition: service_healthy
+        
+  loadbalancer:
+    image: haproxy:2.9
+    ports:
+      - "8080:8080"
+      - "8404:8404"
+    volumes:
+      - ./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    depends_on:
+      - statusserver

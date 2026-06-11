@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <title>Status Server Dashboard</title>
+
+    ```
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f6f8;
+            text-align: center;
+        }
+
+        h1 {
+            margin-top: 20px;
+        }
+
+        .container {
+            width: 60%;
+            margin: auto;
+        }
+
+        .node {
+            padding: 15px;
+            margin: 10px;
+            border-radius: 8px;
+            color: white;
+            font-size: 18px;
+            font-weight: bold;
+        }
+
+        .ONLINE {
+            background-color: #2ecc71;
+        }
+
+        .OFFLINE {
+            background-color: #e74c3c;
+        }
+
+        .ERROR {
+            background-color: #f39c12;
+        }
+    </style>
+    ```
+
+</head>
+
+<body>
+
+<h1>Status Server Dashboard</h1>
+
+<div class="container" id="statusContainer"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
+
+<script src="https://cdn.jsdelivr.net/npm/stompjs/lib/stomp.min.js"></script>
+
+<script>
+    const statusMap = {};
+
+    async function loadInitialData() {
+        try {
+            const response = await fetch('/status');
+            const data = await response.json();
+
+            data.forEach(status => {
+                statusMap[status.nodeId] = status.state;
+            });
+
+            render();
+        } catch (error) {
+            console.error("Fehler beim Laden der Daten:", error);
+        }
+    }
+
+    const socket = new SockJS('/ws');
+    const stompClient = Stomp.over(socket);
+
+    stompClient.connect({}, function () {
+        console.log("WebSocket verbunden");
+
+        loadInitialData();
+
+        stompClient.subscribe('/topic/status', function (message) {
+            const status = JSON.parse(message.body);
+            statusMap[status.nodeId] = status.state;
+            render();
+        });
+    });
+
+    function render() {
+        const container = document.getElementById("statusContainer");
+        container.innerHTML = "";
+
+        for (const node in statusMap) {
+            const div = document.createElement("div");
+            div.classList.add("node");
+
+            const state = statusMap[node];
+            div.classList.add(state);
+
+            div.innerText = node + " → " + state;
+
+            container.appendChild(div);
+        }
+    }
+</script>
+
+</body>
+</html>
