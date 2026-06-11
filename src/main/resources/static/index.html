@@ -31,6 +31,45 @@
         .ONLINE  { background-color: #2ecc71; }
         .OFFLINE { background-color: #e74c3c; }
         .ERROR   { background-color: #f39c12; }
+
+        #form-panel {
+            background: white;
+            padding: 16px;
+            border-radius: 8px;
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            align-items: center;
+        }
+        #form-panel input {
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        #form-panel input.text  { flex: 1 1 160px; }
+        #form-panel input.coord { width: 110px; }
+        #form-panel button {
+            padding: 8px 14px;
+            border: none;
+            border-radius: 4px;
+            color: white;
+            cursor: pointer;
+        }
+        #submitBtn { background: #2ecc71; }
+        #cancelBtn { background: #7f8c8d; }
+        #hint { color: #555; font-size: 14px; margin: 8px 2px; }
+
+        .popup-btn {
+            margin-top: 6px;
+            padding: 4px 8px;
+            border: none;
+            border-radius: 4px;
+            color: white;
+            cursor: pointer;
+        }
+        .popup-edit   { background: #f39c12; }
+        .popup-delete { background: #e74c3c; }
     </style>
 </head>
 
@@ -38,6 +77,17 @@
 
 <div class="layout">
     <h1>Status Server Dashboard</h1>
+
+    <h2>New message</h2>
+    <div id="form-panel">
+        <input id="username"   class="text"  placeholder="Username">
+        <input id="statusText" class="text"  placeholder="Message">
+        <input id="latitude"   class="coord" type="number" step="any" placeholder="Latitude">
+        <input id="longitude"  class="coord" type="number" step="any" placeholder="Longitude">
+        <button id="submitBtn">Add message</button>
+        <button id="cancelBtn" style="display:none">Cancel</button>
+    </div>
+    <div id="hint">Tip: click on the map to fill in the coordinates.</div>
 
     <h2>Message Map</h2>
     <div id="map"></div>
@@ -60,7 +110,8 @@
         attribution: '© OpenStreetMap contributors'
     }).addTo(map);
 
-    const markers = {};   // id -> L.marker
+    const markers = {};    // id -> L.circleMarker
+    const messages = {};   // id -> latest status object (used when editing)
 
     function escapeHtml(value) {
         return String(value ?? '').replace(/[&<>"']/g, c => ({
@@ -71,13 +122,17 @@
     function popupHtml(s) {
         return `<strong>${escapeHtml(s.username)}</strong><br>`
             + `${escapeHtml(s.statusText)}<br>`
-            + `<small>${escapeHtml(s.timestamp)}</small>`;
+            + `<small>${escapeHtml(s.timestamp)}</small><br>`
+            + `<button class="popup-btn popup-edit"   onclick="editMessage('${s.id}')">Edit</button> `
+            + `<button class="popup-btn popup-delete"
+  onclick="deleteMessage('${s.id}')">Delete</button>`;
     }
 
     function upsertMarker(s) {
         if (s.latitude == null || s.longitude == null) {
             return;
         }
+        messages[s.id] = s;
         if (markers[s.id]) {
             markers[s.id].setLatLng([s.latitude, s.longitude]).setPopupContent(popupHtml(s));
         } else {
@@ -96,9 +151,9 @@
             map.removeLayer(markers[id]);
             delete markers[id];
         }
+        delete messages[id];
     }
 
-    // One status update (from REST load or a WebSocket push): add, move, or remove it.
     function applyUserStatus(s) {
         if (s.deleted) {
             removeMarker(s.id);
@@ -107,9 +162,83 @@
         }
     }
 
+    // ---------- Create / edit / delete ----------
+
+    const usernameInput = document.getElementById('username');
+    const statusInput   = document.getElementById('statusText');
+    const latInput      = document.getElementById('latitude');
+    const lngInput      = document.getElementById('longitude');
+    const submitBtn     = document.getElementById('submitBtn');
+    const cancelBtn     = document.getElementById('cancelBtn');
+
+    let editingId = null;   // null = create mode; otherwise editing this id
+
+    map.on('click', function (e) {
+        latInput.value = e.latlng.lat.toFixed(5);
+        lngInput.value = e.latlng.lng.toFixed(5);
+    });
+
+    function resetForm() {
+        editingId = null;
+        usernameInput.value = '';
+        statusInput.value = '';
+        latInput.value = '';
+        lngInput.value = '';
+        submitBtn.textContent = 'Add message';
+        cancelBtn.style.display = 'none';
+    }
+
+    // Called from a marker popup: load the message into the form for editing.
+    function editMessage(id) {
+        const s = messages[id];
+        if (!s) return;
+        editingId = id;
+        usernameInput.value = s.username ?? '';
+        statusInput.value = s.statusText ?? '';
+        latInput.value = s.latitude ?? '';
+        lngInput.value = s.longitude ?? '';
+        submitBtn.textContent = 'Save changes';
+        cancelBtn.style.display = 'inline-block';
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    // Called from a marker popup.
+    async function deleteMessage(id) {
+        await fetch('/messages/' + id, { method: 'DELETE' });
+        // marker disappears via the WebSocket broadcast
+    }
+
+    submitBtn.addEventListener('click', async function () {
+        const payload = {
+            username: usernameInput.value,
+            statusText: statusInput.value,
+            latitude: parseFloat(latInput.value),
+            longitude: parseFloat(lngInput.value)
+        };
+
+        if (Number.isNaN(payload.latitude) || Number.isNaN(payload.longitude)) {
+            alert('Please set latitude and longitude (or click the map).');
+            return;
+        }
+
+        const url    = editingId ? '/messages/' + editingId : '/messages';
+        const method = editingId ? 'PUT' : 'POST';
+
+        await fetch(url, {
+            method: method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        resetForm();
+        // new/updated marker appears via the WebSocket broadcast
+    });
+
+    cancelBtn.addEventListener('click', resetForm);
+
     // ---------- Cluster status panel ----------
 
-    const statusMap = {};   // nodeId -> state
+    const statusMap = {};
 
     function renderClusterStatus() {
         const container = document.getElementById("statusContainer");
@@ -166,4 +295,3 @@
 </script>
 
 </body>
-</html>
