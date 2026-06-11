@@ -1,223 +1,167 @@
 <!DOCTYPE html>
-
 <html lang="de">
 <head>
     <meta charset="UTF-8">
     <title>Status Server Dashboard</title>
 
-    ```
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+
     <style>
         body {
             font-family: Arial, sans-serif;
             background-color: #f4f6f8;
-            text-align: center;
+            margin: 0;
+            padding: 20px;
         }
-
-        h1 {
-            margin-top: 20px;
+        h1 { text-align: center; }
+        h2 { margin-top: 30px; }
+        .layout { max-width: 1000px; margin: auto; }
+        #map {
+            height: 500px;
+            border-radius: 8px;
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
         }
-
-        .container {
-            width: 60%;
-            margin: auto;
-        }
-
         .node {
-            padding: 15px;
-            margin: 10px;
+            padding: 12px;
+            margin: 8px 0;
             border-radius: 8px;
             color: white;
-            font-size: 18px;
             font-weight: bold;
         }
-
-        .ONLINE {
-            background-color: #2ecc71;
-        }
-
-        .OFFLINE {
-            background-color: #e74c3c;
-        }
-
-        .ERROR {
-            background-color: #f39c12;
-        }
-
-        .user-status {
-            background-color: #3498db;
-            text-align: left;
-        }
-
-        .user-status small {
-            display: block;
-            margin-top: 5px;
-            font-weight: normal;
-        }
+        .ONLINE  { background-color: #2ecc71; }
+        .OFFLINE { background-color: #e74c3c; }
+        .ERROR   { background-color: #f39c12; }
     </style>
-    ```
-
 </head>
 
 <body>
 
-<h1>Status Server Dashboard</h1>
+<div class="layout">
+    <h1>Status Server Dashboard</h1>
 
-<h2>Cluster Status</h2>
-<div class="container" id="statusContainer"></div>
+    <h2>Message Map</h2>
+    <div id="map"></div>
 
-<h2>User Status Messages</h2>
-<div class="container" id="userStatusContainer"></div>
+    <h2>Cluster Status</h2>
+    <div id="statusContainer"></div>
+</div>
 
-<script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
-
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/stompjs/lib/stomp.min.js"></script>
 
 <script>
 
-    const statusMap = {};
-    const userStatuses = [];
+    // ---------- Map ----------
 
-    async function loadInitialData() {
+    const map = L.map('map').setView([47.84, 16.52], 7);
 
-        try {
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '© OpenStreetMap contributors'
+    }).addTo(map);
 
-            const response = await fetch('/status');
-            const data = await response.json();
+    const markers = {};   // id -> L.marker
 
-            data.forEach(status => {
-                statusMap[status.nodeId] = status.state;
-            });
+    function escapeHtml(value) {
+        return String(value ?? '').replace(/[&<>"']/g, c => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        }[c]));
+    }
 
-            renderClusterStatus();
+    function popupHtml(s) {
+        return `<strong>${escapeHtml(s.username)}</strong><br>`
+            + `${escapeHtml(s.statusText)}<br>`
+            + `<small>${escapeHtml(s.timestamp)}</small>`;
+    }
 
-        } catch (error) {
-
-            console.error(
-                "Fehler beim Laden der Clusterdaten:",
-                error
-            );
+    function upsertMarker(s) {
+        if (s.latitude == null || s.longitude == null) {
+            return;
+        }
+        if (markers[s.id]) {
+            markers[s.id].setLatLng([s.latitude, s.longitude]).setPopupContent(popupHtml(s));
+        } else {
+            markers[s.id] = L.circleMarker([s.latitude, s.longitude], {
+                radius: 9,
+                color: '#1f4e79',
+                weight: 2,
+                fillColor: '#3498db',
+                fillOpacity: 0.9
+            }).addTo(map).bindPopup(popupHtml(s));
         }
     }
 
-    async function loadUserStatuses() {
-
-        try {
-
-            const response = await fetch('/userstatus');
-            const data = await response.json();
-
-            userStatuses.length = 0;
-
-            data.forEach(status => {
-                userStatuses.push(status);
-            });
-
-            renderUserStatuses();
-
-        } catch (error) {
-
-            console.error(
-                "Fehler beim Laden der UserStatus:",
-                error
-            );
+    function removeMarker(id) {
+        if (markers[id]) {
+            map.removeLayer(markers[id]);
+            delete markers[id];
         }
     }
 
-    const socket = new SockJS('/ws');
-    const stompClient = Stomp.over(socket);
+    // One status update (from REST load or a WebSocket push): add, move, or remove it.
+    function applyUserStatus(s) {
+        if (s.deleted) {
+            removeMarker(s.id);
+        } else {
+            upsertMarker(s);
+        }
+    }
 
-    stompClient.connect({}, function () {
+    // ---------- Cluster status panel ----------
 
-        console.log("WebSocket verbunden");
-
-        loadInitialData();
-        loadUserStatuses();
-
-        stompClient.subscribe('/topic/status', function (message) {
-
-            const status = JSON.parse(message.body);
-
-            statusMap[status.nodeId] = status.state;
-
-            renderClusterStatus();
-        });
-
-        /*
-        Enable later if you broadcast UserStatus updates:
-
-        stompClient.subscribe('/topic/userstatus', function (message) {
-
-            const status = JSON.parse(message.body);
-
-            userStatuses.push(status);
-
-            renderUserStatuses();
-        });
-        */
-    });
+    const statusMap = {};   // nodeId -> state
 
     function renderClusterStatus() {
-
-        const container =
-            document.getElementById("statusContainer");
-
+        const container = document.getElementById("statusContainer");
         container.innerHTML = "";
-
         for (const node in statusMap) {
-
             const div = document.createElement("div");
-
-            div.classList.add("node");
-
-            const state = statusMap[node];
-
-            div.classList.add(state);
-
-            div.innerText = node + " → " + state;
-
+            div.classList.add("node", statusMap[node]);
+            div.innerText = node + " → " + statusMap[node];
             container.appendChild(div);
         }
     }
 
-    function renderUserStatuses() {
+    // ---------- Initial load over REST ----------
 
-        const container =
-            document.getElementById("userStatusContainer");
-
-        container.innerHTML = "";
-
-        userStatuses.forEach(status => {
-
-            const div = document.createElement("div");
-
-            div.classList.add(
-                "node",
-                "user-status"
-            );
-
-            div.innerHTML = `
-                <div>
-                    <strong>${status.username}</strong>
-                </div>
-
-                <div>
-                    ${status.statusText}
-                </div>
-
-                <small>
-                    ${status.timestamp}
-                </small>
-
-                <small>
-                    Latitude: ${status.latitude}
-                    |
-                    Longitude: ${status.longitude}
-                </small>
-            `;
-
-            container.appendChild(div);
-        });
+    async function loadMessages() {
+        try {
+            (await (await fetch('/messages')).json()).forEach(applyUserStatus);
+        } catch (e) {
+            console.error("Failed to load messages:", e);
+        }
     }
+
+    async function loadClusterStatus() {
+        try {
+            (await (await fetch('/status')).json()).forEach(s => statusMap[s.nodeId] = s.state);
+            renderClusterStatus();
+        } catch (e) {
+            console.error("Failed to load cluster status:", e);
+        }
+    }
+
+    // ---------- Live updates over native WebSocket ----------
+
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
+    const stompClient = Stomp.client(wsProtocol + window.location.host + '/ws');
+    stompClient.debug = function () {};
+
+    stompClient.connect({}, function () {
+        console.log("WebSocket connected");
+        loadMessages();
+        loadClusterStatus();
+
+        stompClient.subscribe('/topic/userstatus', function (m) {
+            applyUserStatus(JSON.parse(m.body));
+        });
+
+        stompClient.subscribe('/topic/status', function (m) {
+            const s = JSON.parse(m.body);
+            statusMap[s.nodeId] = s.state;
+            renderClusterStatus();
+        });
+    });
 
 </script>
 
