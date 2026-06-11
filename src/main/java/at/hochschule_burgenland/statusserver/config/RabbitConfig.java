@@ -34,6 +34,26 @@ public class RabbitConfig {
     return BindingBuilder.bind(statusQueue).to(statusExchange);
   }
 
+  @Bean
+  public Queue userStatusQueue() {
+    return new Queue("userStatusQueue-" + instanceId, true);
+  }
+
+  @Bean
+  public FanoutExchange userStatusExchange() {
+    return new FanoutExchange("userStatusExchange");
+  }
+
+  @Bean
+  public Binding userStatusBinding(
+      Queue userStatusQueue,
+      FanoutExchange userStatusExchange) {
+
+    return BindingBuilder
+        .bind(userStatusQueue)
+        .to(userStatusExchange);
+  }
+
   // --- JSON CONVERTER ---
   @Bean
   public Jackson2JsonMessageConverter messageConverter() {

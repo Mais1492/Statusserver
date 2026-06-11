@@ -42,6 +42,17 @@
         .ERROR {
             background-color: #f39c12;
         }
+
+        .user-status {
+            background-color: #3498db;
+            text-align: left;
+        }
+
+        .user-status small {
+            display: block;
+            margin-top: 5px;
+            font-weight: normal;
+        }
     </style>
     ```
 
@@ -51,17 +62,25 @@
 
 <h1>Status Server Dashboard</h1>
 
+<h2>Cluster Status</h2>
 <div class="container" id="statusContainer"></div>
+
+<h2>User Status Messages</h2>
+<div class="container" id="userStatusContainer"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
 
 <script src="https://cdn.jsdelivr.net/npm/stompjs/lib/stomp.min.js"></script>
 
 <script>
+
     const statusMap = {};
+    const userStatuses = [];
 
     async function loadInitialData() {
+
         try {
+
             const response = await fetch('/status');
             const data = await response.json();
 
@@ -69,9 +88,38 @@
                 statusMap[status.nodeId] = status.state;
             });
 
-            render();
+            renderClusterStatus();
+
         } catch (error) {
-            console.error("Fehler beim Laden der Daten:", error);
+
+            console.error(
+                "Fehler beim Laden der Clusterdaten:",
+                error
+            );
+        }
+    }
+
+    async function loadUserStatuses() {
+
+        try {
+
+            const response = await fetch('/userstatus');
+            const data = await response.json();
+
+            userStatuses.length = 0;
+
+            data.forEach(status => {
+                userStatuses.push(status);
+            });
+
+            renderUserStatuses();
+
+        } catch (error) {
+
+            console.error(
+                "Fehler beim Laden der UserStatus:",
+                error
+            );
         }
     }
 
@@ -79,26 +127,50 @@
     const stompClient = Stomp.over(socket);
 
     stompClient.connect({}, function () {
+
         console.log("WebSocket verbunden");
 
         loadInitialData();
+        loadUserStatuses();
 
         stompClient.subscribe('/topic/status', function (message) {
+
             const status = JSON.parse(message.body);
+
             statusMap[status.nodeId] = status.state;
-            render();
+
+            renderClusterStatus();
         });
+
+        /*
+        Enable later if you broadcast UserStatus updates:
+
+        stompClient.subscribe('/topic/userstatus', function (message) {
+
+            const status = JSON.parse(message.body);
+
+            userStatuses.push(status);
+
+            renderUserStatuses();
+        });
+        */
     });
 
-    function render() {
-        const container = document.getElementById("statusContainer");
+    function renderClusterStatus() {
+
+        const container =
+            document.getElementById("statusContainer");
+
         container.innerHTML = "";
 
         for (const node in statusMap) {
+
             const div = document.createElement("div");
+
             div.classList.add("node");
 
             const state = statusMap[node];
+
             div.classList.add(state);
 
             div.innerText = node + " → " + state;
@@ -106,6 +178,47 @@
             container.appendChild(div);
         }
     }
+
+    function renderUserStatuses() {
+
+        const container =
+            document.getElementById("userStatusContainer");
+
+        container.innerHTML = "";
+
+        userStatuses.forEach(status => {
+
+            const div = document.createElement("div");
+
+            div.classList.add(
+                "node",
+                "user-status"
+            );
+
+            div.innerHTML = `
+                <div>
+                    <strong>${status.username}</strong>
+                </div>
+
+                <div>
+                    ${status.statusText}
+                </div>
+
+                <small>
+                    ${status.timestamp}
+                </small>
+
+                <small>
+                    Latitude: ${status.latitude}
+                    |
+                    Longitude: ${status.longitude}
+                </small>
+            `;
+
+            container.appendChild(div);
+        });
+    }
+
 </script>
 
 </body>

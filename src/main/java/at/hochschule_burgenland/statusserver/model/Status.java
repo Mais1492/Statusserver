@@ -24,4 +24,44 @@ public class Status {
 
   @JsonIgnore
   private boolean fromQueue = false;
+
+  public Long getId() {
+    return id;
+  }
+
+  public void setId(Long id) {
+    this.id = id;
+  }
+
+  public String getNodeId() {
+    return nodeId;
+  }
+
+  public void setNodeId(String nodeId) {
+    this.nodeId = nodeId;
+  }
+
+  public StatusState getState() {
+    return state;
+  }
+
+  public void setState(StatusState state) {
+    this.state = state;
+  }
+
+  public Instant getUpdatedAt() {
+    return updatedAt;
+  }
+
+  public void setUpdatedAt(Instant updatedAt) {
+    this.updatedAt = updatedAt;
+  }
+
+  public boolean isFromQueue() {
+    return fromQueue;
+  }
+
+  public void setFromQueue(boolean fromQueue) {
+    this.fromQueue = fromQueue;
+  }
 }
