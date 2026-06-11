@@ -27,7 +27,6 @@ public class ClusterSyncService {
 
     @EventListener(ApplicationReadyEvent.class)
     public void onStartup() {
-        publishOnline();
         userStatusService.synchronizeFromCluster();
 
     }
