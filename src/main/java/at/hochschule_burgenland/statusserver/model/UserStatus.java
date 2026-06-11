@@ -10,8 +10,7 @@ import java.time.Instant;
 public class UserStatus {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    private String id;
 
     private String username;
 
@@ -23,14 +22,15 @@ public class UserStatus {
 
     private Double longitude;
 
-    @Transient
-    private boolean fromQueue = false;
+    private Instant updatedAt;
 
-    public Long getId() {
+    private boolean deleted = false;
+
+    public String getId() {
         return id;
     }
 
-    public void setId(Long id) {
+    public void setId(String id) {
         this.id = id;
     }
 
@@ -74,11 +74,19 @@ public class UserStatus {
         this.longitude = longitude;
     }
 
-    public boolean isFromQueue() {
-        return fromQueue;
+    public Instant getUpdatedAt() {
+        return updatedAt;
     }
 
-    public void setFromQueue(boolean fromQueue) {
-        this.fromQueue = fromQueue;
+    public void setUpdatedAt(Instant updatedAt) {
+        this.updatedAt = updatedAt;
+    }
+
+    public boolean isDeleted() {
+        return deleted;
+    }
+
+    public void setDeleted(boolean deleted) {
+        this.deleted = deleted;
     }
 }

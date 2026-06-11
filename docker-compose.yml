@@ -24,7 +24,7 @@ services:
   loadbalancer:
     image: haproxy:2.9
     ports:
-      - "8080:8080"
+      - "8403:8403"
       - "8404:8404"
     volumes:
       - ./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro

@@ -16,9 +16,6 @@ public class UserStatusListener {
 
     @RabbitListener(queues = "#{userStatusQueue.name}")
     public void receive(UserStatus status) {
-
-        status.setFromQueue(true);
-
-        service.save(status);
+        service.applyFromRemote(status);
     }
 }

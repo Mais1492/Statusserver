@@ -20,7 +20,7 @@ public class UserStatusController {
     public UserStatus create(
         @RequestBody UserStatus status) {
 
-        return service.save(status);
+        return service.create(status);
     }
 
     @GetMapping
