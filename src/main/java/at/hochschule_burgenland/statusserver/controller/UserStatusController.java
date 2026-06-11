@@ -29,6 +29,11 @@ public class UserStatusController {
         return service.findAll();
     }
 
+    @GetMapping("/sync")
+    public List<UserStatus> sync() {
+        return service.findAllIncludingDeleted();
+    }
+
     @PutMapping("/{id}")
     public ResponseEntity<UserStatus> update(@PathVariable String id, @RequestBody UserStatus changes) {
         UserStatus updated = service.update(id, changes);

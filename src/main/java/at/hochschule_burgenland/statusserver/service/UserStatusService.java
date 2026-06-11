@@ -90,7 +90,6 @@ public class UserStatusService {
     public void applyFromRemote(UserStatus incoming) {
         UserStatus existing = repository.findById(incoming.getId()).orElse(null);
 
-
         if (existing == null) {
             UserStatus saved = repository.save(incoming);
             broadcast(saved);
@@ -115,10 +114,14 @@ public class UserStatusService {
         return repository.findByDeletedFalse();
     }
 
-    public void synchronizeFromCluster() {
+    public List<UserStatus> findAllIncludingDeleted() {
+        return repository.findAll();
+    }
 
+    public void synchronizeFromCluster() {
         try {
-            UserStatus[] statuses = restTemplate.getForObject("http://haproxy:8080/userstatus", UserStatus[].class);
+            UserStatus[] statuses = restTemplate.getForObject(
+                    "http://loadbalancer:8080/messages/sync", UserStatus[].class);
 
             if (statuses == null) {
                 return;
@@ -137,6 +140,11 @@ public class UserStatusService {
     }
 
     private void replicate(UserStatus status) {
-        rabbitTemplate.convertAndSend("userStatusExchange", "", status);
+        try {
+            rabbitTemplate.convertAndSend("userStatusExchange", "", status);
+        } catch (Exception e) {
+            System.out.println("Replicate via RabbitMQ failed (will heal via sync): " +
+                    e.getMessage());
+        }
     }
 }

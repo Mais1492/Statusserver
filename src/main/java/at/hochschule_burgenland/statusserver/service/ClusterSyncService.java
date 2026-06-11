@@ -44,6 +44,11 @@ public class ClusterSyncService {
         statusService.markStaleInstancesOffline(threshold);
     }
 
+    @Scheduled(fixedDelay = 10000)
+    public void antiEntropy() {
+        userStatusService.synchronizeFromCluster();
+    }
+
     private void publishOnline() {
         Status status = new Status();
         status.setNodeId("statusserver:" + instanceId);
