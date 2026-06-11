@@ -24,9 +24,11 @@ services:
   loadbalancer:
     image: haproxy:2.9
     ports:
-      - "8403:8403"
+      - "8080:8080"
+      - "8443:8443"
       - "8404:8404"
     volumes:
       - ./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+      - ./haproxy.pem:/usr/local/etc/haproxy/haproxy.pem:ro
     depends_on:
       - statusserver
