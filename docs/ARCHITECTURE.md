@@ -13,26 +13,26 @@ balancer fronts the nodes, and a web client shows every message live on a map.
 ## System overview
 
 ```mermaid
-flowchart TB
-    B1["Browser"]
-    B2["Browser"]
-    LB["HAProxy load balancer<br/>TLS termination 8443 / 8080"]
-    S1["statusserver 1<br/>Spring Boot + H2"]
-    S2["statusserver 2<br/>Spring Boot + H2"]
-    S3["statusserver N<br/>Spring Boot + H2"]
-    MQ[("RabbitMQ<br/>fanout exchange")]
-
-    B1 -->|HTTPS (8443) / WSS| LB
-    B2 -->|HTTP (8080) | LB
-    LB -->|HTTP / WS| S1
-    LB -->|HTTP / WS| S2
-    LB -->|HTTP / WS| S3
-    S1 -->|publish / consume| MQ
-    S2 -->|publish / consume| MQ
-    S3 -->|publish / consume| MQ
-    S1 -.->|anti-entropy| LB
-    S2 -.->|anti-entropy| LB
-    S3 -.->|anti-entropy| LB
+flowchart TB  
+    B1["Browser"]  
+	B2["Browser"]  
+	LB["HAProxy load balancer<br/>TLS termination 8443 / 8080"]  
+	S1["statusserver 1<br/>Spring Boot + H2"]  
+	S2["statusserver 2<br/>Spring Boot + H2"]  
+	S3["statusserver N<br/>Spring Boot + H2"]  
+	MQ[("RabbitMQ<br/>fanout exchange")]  
+	  
+	B1 -->|HTTPS / WSS| LB  
+	B2 -->|HTTP | LB  
+	LB -->|HTTP / WS| S1  
+	LB -->|HTTP / WS| S2  
+	LB -->|HTTP / WS| S3  
+	S1 -->|publish / consume| MQ  
+	S2 -->|publish / consume| MQ  
+	S3 -->|publish / consume| MQ  
+	S1 -.->|anti-entropy| LB  
+	S2 -.->|anti-entropy| LB  
+	S3 -.->|anti-entropy| LB
 ```
 
 - **HAProxy** — single public entry point; round-robins REST across the nodes and
