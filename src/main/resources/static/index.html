@@ -1,112 +1,297 @@
 <!DOCTYPE html>
-
 <html lang="de">
 <head>
     <meta charset="UTF-8">
     <title>Status Server Dashboard</title>
 
-    ```
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+
     <style>
         body {
             font-family: Arial, sans-serif;
             background-color: #f4f6f8;
-            text-align: center;
+            margin: 0;
+            padding: 20px;
         }
-
-        h1 {
-            margin-top: 20px;
+        h1 { text-align: center; }
+        h2 { margin-top: 30px; }
+        .layout { max-width: 1000px; margin: auto; }
+        #map {
+            height: 500px;
+            border-radius: 8px;
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
         }
-
-        .container {
-            width: 60%;
-            margin: auto;
-        }
-
         .node {
-            padding: 15px;
-            margin: 10px;
+            padding: 12px;
+            margin: 8px 0;
             border-radius: 8px;
             color: white;
-            font-size: 18px;
             font-weight: bold;
         }
+        .ONLINE  { background-color: #2ecc71; }
+        .OFFLINE { background-color: #e74c3c; }
+        .ERROR   { background-color: #f39c12; }
 
-        .ONLINE {
-            background-color: #2ecc71;
+        #form-panel {
+            background: white;
+            padding: 16px;
+            border-radius: 8px;
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            align-items: center;
         }
+        #form-panel input {
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        #form-panel input.text  { flex: 1 1 160px; }
+        #form-panel input.coord { width: 110px; }
+        #form-panel button {
+            padding: 8px 14px;
+            border: none;
+            border-radius: 4px;
+            color: white;
+            cursor: pointer;
+        }
+        #submitBtn { background: #2ecc71; }
+        #cancelBtn { background: #7f8c8d; }
+        #hint { color: #555; font-size: 14px; margin: 8px 2px; }
 
-        .OFFLINE {
-            background-color: #e74c3c;
+        .popup-btn {
+            margin-top: 6px;
+            padding: 4px 8px;
+            border: none;
+            border-radius: 4px;
+            color: white;
+            cursor: pointer;
         }
-
-        .ERROR {
-            background-color: #f39c12;
-        }
+        .popup-edit   { background: #f39c12; }
+        .popup-delete { background: #e74c3c; }
     </style>
-    ```
-
 </head>
 
 <body>
 
-<h1>Status Server Dashboard</h1>
+<div class="layout">
+    <h1>Status Server Dashboard</h1>
 
-<div class="container" id="statusContainer"></div>
+    <h2>New message</h2>
+    <div id="form-panel">
+        <input id="username"   class="text"  placeholder="Username">
+        <input id="statusText" class="text"  placeholder="Message">
+        <input id="latitude"   class="coord" type="number" step="any" placeholder="Latitude">
+        <input id="longitude"  class="coord" type="number" step="any" placeholder="Longitude">
+        <button id="submitBtn">Add message</button>
+        <button id="cancelBtn" style="display:none">Cancel</button>
+    </div>
+    <div id="hint">Tip: click on the map to fill in the coordinates.</div>
 
-<script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
+    <h2>Message Map</h2>
+    <div id="map"></div>
 
+    <h2>Cluster Status</h2>
+    <div id="statusContainer"></div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/stompjs/lib/stomp.min.js"></script>
 
 <script>
-    const statusMap = {};
 
-    async function loadInitialData() {
-        try {
-            const response = await fetch('/status');
-            const data = await response.json();
+    // ---------- Map ----------
 
-            data.forEach(status => {
-                statusMap[status.nodeId] = status.state;
-            });
+    const map = L.map('map').setView([47.84, 16.52], 7);
 
-            render();
-        } catch (error) {
-            console.error("Fehler beim Laden der Daten:", error);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '© OpenStreetMap contributors'
+    }).addTo(map);
+
+    const markers = {};    // id -> L.circleMarker
+    const messages = {};   // id -> latest status object (used when editing)
+
+    function escapeHtml(value) {
+        return String(value ?? '').replace(/[&<>"']/g, c => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        }[c]));
+    }
+
+    function popupHtml(s) {
+        return `<strong>${escapeHtml(s.username)}</strong><br>`
+            + `${escapeHtml(s.statusText)}<br>`
+            + `<small>${escapeHtml(s.timestamp)}</small><br>`
+            + `<button class="popup-btn popup-edit"   onclick="editMessage('${s.id}')">Edit</button> `
+            + `<button class="popup-btn popup-delete"
+  onclick="deleteMessage('${s.id}')">Delete</button>`;
+    }
+
+    function upsertMarker(s) {
+        if (s.latitude == null || s.longitude == null) {
+            return;
+        }
+        messages[s.id] = s;
+        if (markers[s.id]) {
+            markers[s.id].setLatLng([s.latitude, s.longitude]).setPopupContent(popupHtml(s));
+        } else {
+            markers[s.id] = L.circleMarker([s.latitude, s.longitude], {
+                radius: 9,
+                color: '#1f4e79',
+                weight: 2,
+                fillColor: '#3498db',
+                fillOpacity: 0.9
+            }).addTo(map).bindPopup(popupHtml(s));
         }
     }
 
-    const socket = new SockJS('/ws');
-    const stompClient = Stomp.over(socket);
+    function removeMarker(id) {
+        if (markers[id]) {
+            map.removeLayer(markers[id]);
+            delete markers[id];
+        }
+        delete messages[id];
+    }
 
-    stompClient.connect({}, function () {
-        console.log("WebSocket verbunden");
+    function applyUserStatus(s) {
+        if (s.deleted) {
+            removeMarker(s.id);
+        } else {
+            upsertMarker(s);
+        }
+    }
 
-        loadInitialData();
+    // ---------- Create / edit / delete ----------
 
-        stompClient.subscribe('/topic/status', function (message) {
-            const status = JSON.parse(message.body);
-            statusMap[status.nodeId] = status.state;
-            render();
-        });
+    const usernameInput = document.getElementById('username');
+    const statusInput   = document.getElementById('statusText');
+    const latInput      = document.getElementById('latitude');
+    const lngInput      = document.getElementById('longitude');
+    const submitBtn     = document.getElementById('submitBtn');
+    const cancelBtn     = document.getElementById('cancelBtn');
+
+    let editingId = null;   // null = create mode; otherwise editing this id
+
+    map.on('click', function (e) {
+        latInput.value = e.latlng.lat.toFixed(5);
+        lngInput.value = e.latlng.lng.toFixed(5);
     });
 
-    function render() {
+    function resetForm() {
+        editingId = null;
+        usernameInput.value = '';
+        statusInput.value = '';
+        latInput.value = '';
+        lngInput.value = '';
+        submitBtn.textContent = 'Add message';
+        cancelBtn.style.display = 'none';
+    }
+
+    // Called from a marker popup: load the message into the form for editing.
+    function editMessage(id) {
+        const s = messages[id];
+        if (!s) return;
+        editingId = id;
+        usernameInput.value = s.username ?? '';
+        statusInput.value = s.statusText ?? '';
+        latInput.value = s.latitude ?? '';
+        lngInput.value = s.longitude ?? '';
+        submitBtn.textContent = 'Save changes';
+        cancelBtn.style.display = 'inline-block';
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    // Called from a marker popup.
+    async function deleteMessage(id) {
+        await fetch('/messages/' + id, { method: 'DELETE' });
+        // marker disappears via the WebSocket broadcast
+    }
+
+    submitBtn.addEventListener('click', async function () {
+        const payload = {
+            username: usernameInput.value,
+            statusText: statusInput.value,
+            latitude: parseFloat(latInput.value),
+            longitude: parseFloat(lngInput.value)
+        };
+
+        if (Number.isNaN(payload.latitude) || Number.isNaN(payload.longitude)) {
+            alert('Please set latitude and longitude (or click the map).');
+            return;
+        }
+
+        const url    = editingId ? '/messages/' + editingId : '/messages';
+        const method = editingId ? 'PUT' : 'POST';
+
+        await fetch(url, {
+            method: method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        resetForm();
+        // new/updated marker appears via the WebSocket broadcast
+    });
+
+    cancelBtn.addEventListener('click', resetForm);
+
+    // ---------- Cluster status panel ----------
+
+    const statusMap = {};
+
+    function renderClusterStatus() {
         const container = document.getElementById("statusContainer");
         container.innerHTML = "";
-
         for (const node in statusMap) {
             const div = document.createElement("div");
-            div.classList.add("node");
-
-            const state = statusMap[node];
-            div.classList.add(state);
-
-            div.innerText = node + " → " + state;
-
+            div.classList.add("node", statusMap[node]);
+            div.innerText = node + " → " + statusMap[node];
             container.appendChild(div);
         }
     }
+
+    // ---------- Initial load over REST ----------
+
+    async function loadMessages() {
+        try {
+            (await (await fetch('/messages')).json()).forEach(applyUserStatus);
+        } catch (e) {
+            console.error("Failed to load messages:", e);
+        }
+    }
+
+    async function loadClusterStatus() {
+        try {
+            (await (await fetch('/status')).json()).forEach(s => statusMap[s.nodeId] = s.state);
+            renderClusterStatus();
+        } catch (e) {
+            console.error("Failed to load cluster status:", e);
+        }
+    }
+
+    // ---------- Live updates over native WebSocket ----------
+
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
+    const stompClient = Stomp.client(wsProtocol + window.location.host + '/ws');
+    stompClient.debug = function () {};
+
+    stompClient.connect({}, function () {
+        console.log("WebSocket connected");
+        loadMessages();
+        loadClusterStatus();
+
+        stompClient.subscribe('/topic/userstatus', function (m) {
+            applyUserStatus(JSON.parse(m.body));
+        });
+
+        stompClient.subscribe('/topic/status', function (m) {
+            const s = JSON.parse(m.body);
+            statusMap[s.nodeId] = s.state;
+            renderClusterStatus();
+        });
+    });
+
 </script>
 
 </body>
-</html>

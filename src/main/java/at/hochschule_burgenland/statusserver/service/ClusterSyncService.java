@@ -14,17 +14,21 @@ import java.time.Instant;
 public class ClusterSyncService {
 
     private final StatusService statusService;
+    private final UserStatusService userStatusService;
     private final String instanceId;
 
     public ClusterSyncService(StatusService statusService,
+                              UserStatusService userStatusService,
                               @Value("${status.instance-id}") String instanceId) {
         this.statusService = statusService;
+        this.userStatusService = userStatusService;
         this.instanceId = instanceId;
     }
 
     @EventListener(ApplicationReadyEvent.class)
     public void onStartup() {
-        publishOnline();
+        userStatusService.synchronizeFromCluster();
+
     }
 
     @Scheduled(fixedDelayString = "5000")
@@ -38,6 +42,11 @@ public class ClusterSyncService {
         Instant threshold = Instant.now().minusSeconds(10);
 
         statusService.markStaleInstancesOffline(threshold);
+    }
+
+    @Scheduled(fixedDelay = 10000)
+    public void antiEntropy() {
+        userStatusService.synchronizeFromCluster();
     }
 
     private void publishOnline() {
