@@ -6,7 +6,7 @@ map dashboard. Final project for *Technologien verteilter Systeme* (SS26).
 Several identical Spring Boot nodes each keep a full copy of the data and stay
 consistent through a custom replication mechanism (cluster-wide UUIDs +
 last-writer-wins + tombstones), with bootstrap and anti-entropy for fault
-tolerance. See **[ARCHITECTURE.md](ARCHITECTURE.md)** for the full design.
+tolerance. See **[ARCHITECTURE.md](docs/ARCHITECTURE.md)** for the full design.
 
 ## Prerequisites
 

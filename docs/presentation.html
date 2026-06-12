@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Distributed Status Server - TEVS Final Presentation</title>
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5/dist/reveal.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5/dist/theme/black.css">
+
+<style>
+:root{
+  --accent:#4fc3f7;
+}
+.reveal h1,.reveal h2,.reveal h3{color:var(--accent);}
+.arch{
+    display:flex;
+    justify-content:center;
+    gap:20px;
+    margin-top:20px;
+}
+.box{
+    border:2px solid #4fc3f7;
+    border-radius:10px;
+    padding:20px;
+    min-width:140px;
+}
+.small{font-size:0.6em;}
+.grid{
+ display:grid;
+ grid-template-columns:1fr 1fr;
+ gap:20px;
+}
+code{
+ font-size:0.9em;
+}
+</style>
+</head>
+<body>
+<div class="reveal">
+<div class="slides">
+
+<section>
+<h1>Distributed Status Server</h1>
+<h3>Technologien Verteilter Systeme (SS26)</h3>
+<p>Fault-Tolerant Distributed Status Messaging Platform</p>
+<p class="small">Spring Boot • RabbitMQ • WebSocket • HAProxy • Docker</p>
+</section>
+
+<section>
+<h2>Project Goal</h2>
+<ul>
+<li class="fragment">Distributed CRUD application for geo-tagged status messages</li>
+<li class="fragment">Replication across multiple nodes</li>
+<li class="fragment">Fault tolerance and recovery</li>
+<li class="fragment">Eventual consistency</li>
+<li class="fragment">Fully containerized deployment</li>
+</ul>
+</section>
+
+<section>
+<h2>UI</h2>
+<ul>
+<li>Interactive map dashboard</li>
+<li>Create / Update / Delete status messages</li>
+<li>Live updates</li>
+</ul>
+</section>
+
+<section>
+<h2>Technology Stack</h2>
+<div class="grid">
+<div class="box">
+<h3 style='font-size:0.95EM'>Backend</h3>
+Spring Boot 4<br>Java 21
+</div>
+<div class="box">
+<h3 style='font-size:0.95EM'>Storage</h3>
+H2 In-Memory DB
+</div>
+<div class="box">
+<h3 style='font-size:0.95EM'>Communication</h3>
+REST<br>RabbitMQ<br>WebSocket
+</div>
+<div class="box">
+<h3 style='font-size:0.95EM'>Infrastructure</h3>
+Docker Compose<br>HAProxy
+</div>
+</div>
+</section>
+
+<section>
+<h2>System Architecture</h2>
+<img  style='border:3px solid #FFFFFF' src="architecture.png" alt="Architecture-Overview"/>
+</section>
+
+<section>
+<h2>Communication</h2>
+<h3>REST</h3>
+<p>Frontend → Backend CRUD operations</p>
+<h3>RabbitMQ</h3>
+<p>Backend → Backend replication</p>
+<h3>WebSocket</h3>
+<p>Backend → Frontend live updates</p>
+</section>
+
+<section>
+<h2>Replication Mechanism</h2>
+<img  style='border:5px solid #666666' src="replication.png" alt="Replication-Diagram"/>
+</section>
+
+<section>
+<h2>Conflict Resolution</h2>
+<h3>Last Writer Wins (LWW)</h3>
+<pre><code>
+Node A:
+status = "Hello"
+updatedAt = 10:01
+
+Node B:
+status = "Hi"
+updatedAt = 10:02
+</code></pre>
+<p><strong>Result:</strong> "Hi" wins because timestamp is newer.</p>
+</section>
+
+<section>
+<h2>Deletes & Tombstones</h2>
+<ul>
+<li>Deletes are replicated like updates</li>
+<li>Record remains in storage with deleted=true</li>
+<li>Prevents deleted data from reappearing</li>
+<li>Tombstones included in synchronization endpoint</li>
+</ul>
+</section>
+
+<section>
+<h2>Fault Tolerance</h2>
+<ul>
+<li class="fragment">Any node can fail without data loss</li>
+<li class="fragment">HAProxy routes traffic to remaining nodes</li>
+<li class="fragment">RabbitMQ outages do not block writes</li>
+<li class="fragment">System converges automatically</li>
+</ul>
+</section>
+
+<section>
+<h2>Bootstrap Recovery</h2>
+<p>When a node starts:</p>
+<ol>
+<li>Requests full cluster state via <code>/messages/sync</code></li>
+<li>Merges received data using LWW</li>
+<li>Receives all missed updates</li>
+<li>Becomes fully synchronized</li>
+</ol>
+</section>
+
+<section>
+<h2>Anti-Entropy Synchronization</h2>
+<p>Every 10 seconds:</p>
+<pre><code>GET /messages/sync</code></pre>
+<ul>
+<li>Repairs missed RabbitMQ messages</li>
+<li>Recovers from temporary outages</li>
+<li>Guarantees eventual consistency</li>
+<li>Meets 15 second convergence requirement</li>
+</ul>
+</section>
+
+<section>
+<h2>Security</h2>
+<ul>
+<li>HTTPS and WSS via HAProxy</li>
+<li>TLS termination at load balancer</li>
+<li>Self-signed certificate for demo</li>
+<li>Internal Docker network uses HTTP</li>
+</ul>
+</section>
+
+<section>
+<h2>Containerized Deployment</h2>
+<pre><code>docker compose up --build --scale statusserver=3</code></pre>
+<p>Starts:</p>
+<ul>
+<li>HAProxy</li>
+<li>RabbitMQ</li>
+<li>3+ Status Server Nodes</li>
+</ul>
+</section>
+
+</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5/dist/reveal.js"></script>
+<script>
+Reveal.initialize({
+    hash:true,
+    slideNumber:true,
+    transition:'slide'
+});
+</script>
+</body>
+</html>
