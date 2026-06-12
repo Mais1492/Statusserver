@@ -1,6 +1,6 @@
 # Architecture — Distributed Status Server
 
-*Technologien verteilter Systeme, SS26 — final project*
+*Technologien verteilter Systeme, SS26 — Andreas Weinhofer, Marcel Dumitru, Michael Mayr*
 
 ## Purpose
 
