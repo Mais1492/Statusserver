@@ -46,7 +46,7 @@ higher number to run more nodes (e.g. `--scale statusserver=5`).
 | URL | What |
 | --- | --- |
 | https://localhost:8443 | Dashboard (HTTPS — accept the self-signed certificate warning) |
-| http://localhost:8080 | Same dashboard over plain HTTP (testing convenience) |
+| http://localhost:8080 | Same dashboard over plain HTTP (testing & to display HTTP-setup) |
 | http://localhost:8404 | HAProxy statistics |
 | http://localhost:15672 | RabbitMQ management (`guest` / `guest`) |
 
@@ -58,7 +58,7 @@ higher number to run more nodes (e.g. `--scale statusserver=5`).
 | `POST` | `/messages` | Create a message |
 | `PUT` | `/messages/{id}` | Update a message |
 | `DELETE` | `/messages/{id}` | Delete a message (tombstone) |
-| `GET` | `/messages/sync` | Full state incl. tombstones (node-to-node sync) |
+| `GET` | `/messages/sync` | Full state incl. tombstones (node-to-node sync via proxy) |
 | `GET` | `/status` | Cluster node health |
 
 A status message has `username`, `statusText`, `latitude`, `longitude`; the server

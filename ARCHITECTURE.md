@@ -22,8 +22,8 @@ flowchart TB
     S3["statusserver N<br/>Spring Boot + H2"]
     MQ[("RabbitMQ<br/>fanout exchange")]
 
-    B1 -->|HTTPS / WSS| LB
-    B2 -->|HTTPS / WSS| LB
+    B1 -->|HTTPS (8443) / WSS| LB
+    B2 -->|HTTP (8080) | LB
     LB -->|HTTP / WS| S1
     LB -->|HTTP / WS| S2
     LB -->|HTTP / WS| S3
@@ -36,7 +36,7 @@ flowchart TB
 ```
 
 - **HAProxy** — single public entry point; round-robins REST across the nodes and
-  terminates **TLS** (HTTPS on `:8443`, WSS for the WebSocket).
+  terminates **TLS** (HTTPS on `:8443` (or HTTP on `:8080`), WSS for the WebSocket).
 - **statusserver nodes** (Spring Boot 4 / Java 21) — identical replicas. Each owns
   a local **H2 in-memory** database (a per-node local store, which the brief
   permits; there is no external/shared DB).
@@ -106,7 +106,7 @@ later `updatedAt`.
 
 ## Security
 
-TLS is terminated at HAProxy: clients use **HTTPS/WSS on `:8443`**, while traffic
+TLS is terminated at HAProxy: clients use **HTTPS/WSS on `:8443`**, or **HTTP on `:8080` (for display purposes)** while traffic
 on the internal Docker network stays plain HTTP. A self-signed certificate is used
 for the demo — browsers warn about *trust* (no CA vouches for it), but the channel
 is fully encrypted.
